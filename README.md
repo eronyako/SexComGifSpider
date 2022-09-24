@@ -56,8 +56,12 @@ pyinstaller -F --icon=icon.ico SexComGifSpider.py
 
 ## 输出
 
-若正常运行后将会在当前文件夹创建 sexcom_lib 文件夹。
+若正常运行后将会在当前文件夹创建 `sexcom_lib` 文件夹。
 
-解析的 url 存放在 ./sexcom_lib/gif_urls.json
+解析的 url 存放在 `./sexcom_lib/gif_urls.json`
 
-程序会按照关键字创建文件夹，将下载的文件放入各文件夹中。
+程序会按照关键字创建文件夹，将该次下载的 gif 文件放入各文件夹中。
+
+## 使用许可
+
+[MIT](LICENSE) © Eronyako
