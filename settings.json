@@ -1,5 +1,23 @@
 {
-    "key_word": "Orgasm",
+    "key_words": [
+        "Orgasm",
+        "Squirting"
+    ],
+    "sort": "latest",
     "start_page": 1,
-    "end_page": 3
+    "end_page": 3,
+    "use_mysql": false,
+    "mysql_conf": {
+        "host": "10.2.0.109",
+        "port": 3306,
+        "user": "spider",
+        "password": "123456",
+        "db":"spider_db",
+        "table": "sexcom",
+        "create_table": false
+    },
+    "phase": {
+        "get_urls": true,
+        "get_gifs": true
+    }
 }
