@@ -13,7 +13,7 @@
 
 配置文件需要使用 UTF-8 Without BOM 编码，json 示例如下:
 
-``` json
+``` text
 {
     "key_words": [
         // 搜索关键字，可多个
@@ -68,15 +68,16 @@
 - requests
 - lxml
 - pymysql
+- loguru
 
 #### 使用
 
-双击运行 SexComGifSpider.py
+双击运行 main.py
 
 在当前目录运行：
 
 ```shell
-python SexComGifSpider.py
+python main.py
 ```
 
 #### 打包 exe 文件
@@ -84,7 +85,7 @@ python SexComGifSpider.py
 可使用 pyinstaller 包，用如下命令将会在 `./dist/` 目录下创建 windows 可执行程序：
 
 ```shell
-pyinstaller -F --icon=icon.ico SexComGifSpider.py
+pyinstaller -F --icon=icon.ico main.py
 ```
 
 ### 使用封装版
@@ -92,6 +93,8 @@ pyinstaller -F --icon=icon.ico SexComGifSpider.py
 双击运行 SexComGifSpider.exe
 
 ## 输出
+
+默认状态下：
 
 若正常运行后将会在当前文件夹创建 `sexcom_lib` 文件夹。
 

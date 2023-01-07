@@ -1,23 +1,92 @@
 {
-    "key_words": [
-        "Orgasm",
-        "Squirting"
-    ],
-    "sort": "latest",
-    "start_page": 1,
-    "end_page": 3,
-    "use_mysql": false,
-    "mysql_conf": {
-        "host": "10.2.0.109",
-        "port": 3306,
-        "user": "spider",
-        "password": "123456",
-        "db":"spider_db",
-        "table": "sexcom",
-        "create_table": false
-    },
-    "phase": {
-        "get_urls": true,
-        "get_gifs": true
-    }
+  "root_url": "https://www.sex.com/",
+  "catalogue_url": "https://www.sex.com/gifs/",
+  "query_url": "https://www.sex.com/search/gifs",
+  "catalogue_list": [
+    "amateur",
+    "anal",
+    "asian",
+    "ass",
+    "babes",
+    "bbw",
+    "bdsm",
+    "big-tits",
+    "blonde",
+    "blowjob",
+    "brunette",
+    "celebrity",
+    "college",
+    "creampie",
+    "cumshots",
+    "double-penetration",
+    "ebony",
+    "emo",
+    "female-ejaculation",
+    "fisting",
+    "footjob",
+    "gangbang",
+    "gay",
+    "girlfriend",
+    "group-sex",
+    "hairy",
+    "handjob",
+    "hardcore",
+    "hentai",
+    "indian",
+    "interracial",
+    "latina",
+    "lesbian",
+    "lingerie",
+    "masturbation",
+    "mature",
+    "milf",
+    "non-nude",
+    "panties",
+    "penis",
+    "pornstar",
+    "public-sex",
+    "pussy",
+    "redhead",
+    "selfshot",
+    "shemale",
+    "solo-male",
+    "teen",
+    "threesome",
+    "toys"
+  ],
+  "key_words": [
+    "teen",
+    "selfshot",
+    "squirting",
+    "orgasm",
+    "female-ejaculation"
+  ],
+  "sort": "latest",
+  "pages": [1, 3],
+  "lib_dir": "sexcom_lib",
+  "json_path": "gif_urls.json",
+  "use_mysql": false,
+  "mysql_conf": {
+    "host": "10.0.0.2",
+    "port": 3306,
+    "user": "spider",
+    "password": "123456",
+    "db": "spider_db",
+    "table": "sexcom",
+    "create_table": false
+  },
+  "use_proxy": true,
+  "proxy": {
+    "host": "10.0.0.1",
+    "port": 1080
+  },
+  "phase": {
+    "get_urls": false,
+    "get_gifs": true
+  },
+  "headers": {
+    "referer": "https://www.sex.com/",
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/105.0.0.0 Safari/537.36"
+  },
+  "gif_xpath": "//div[@id=\"masonry_container\"]/div[@class=\"masonry_box small_pin_box\"]/a[@class=\"image_wrapper\"]/img/@data-src"
 }

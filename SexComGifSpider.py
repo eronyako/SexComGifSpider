@@ -1,282 +1,265 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-# @Subj: SexComGifSpider
-# @File: SexComGifSpider.py
-# @Date: 2022/9/26 13:02
-
-
-import os
+# @Subj: SexGifSpider
+# @File: SexGifSpider.py
+# @Date: 2023/1/4 22:22
 import json
+import os
 import requests
-
+from loguru import logger
 from lxml import etree
 from pymysql import Connection
 
-root_url = 'https://www.sex.com/search/gifs'
-# 配置文件路径
-settings_path = os.path.join(os.getcwd(), 'settings.json')
-# 请求头
-headers_root = {
-    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/105.0.0.0 Safari/537.36',
-}
-headers_gif = {
-    'referer': 'https://www.sex.com/',
-    'user-agent': headers_root['User-Agent']
-}
-# 解析 xpath
-gif_xpath = '//div[@id="masonry_container"]/div[@class="masonry_box small_pin_box"]/a[@class="image_wrapper"]/img/@data-src'
+
+def singleton(cls):
+    _instance = {}
+
+    def inner(*args, **kwargs):
+        if cls not in _instance:
+            obj = cls(*args, **kwargs)
+            _instance[cls] = obj
+        return _instance[cls]
+
+    return inner
 
 
-def get_settings(path: str) -> tuple[list[str], int, int, dict, bool, dict, dict]:
-    """
-    读取配置文件
-    :param path: 配置文件路径
-    :return: keys: 关键字列表, start: 开始页面, end: 结束页面, params: 用于请求的参数框架, use_db: 是否使用数据库方式, db_conf: 数据库配置
-    """
-    with open(path, 'r', encoding='UTF-8') as f:
-        json_data = json.load(f)
-    keys = json_data['key_words']
-    start = json_data['start_page']
-    end = json_data['end_page']
-    use_db = json_data['use_mysql']
-    db_conf = json_data['mysql_conf']
-    phase = json_data['phase']
-    params = {'query': None, 'page': None}
-    if json_data['sort'] is not None or json_data['sort'] != '':
-        params['sort'] = json_data['sort']
-    return keys, start, end, params, use_db, db_conf, phase
+@singleton
+class Client(object):
+    def __init__(self, settings=''):
+        self.root_url = "https://www.sex.com/"
+        self.catalogue_url = "https://www.sex.com/gifs/"
+        self.query_url = "https://www.sex.com/search/gifs"
+        self.catalogue_list = [
+            "amateur",
+            "anal",
+            "asian",
+            "ass",
+            "babes",
+            "bbw",
+            "bdsm",
+            "big-tits",
+            "blonde",
+            "blowjob",
+            "brunette",
+            "celebrity",
+            "college",
+            "creampie",
+            "cumshots",
+            "double-penetration",
+            "ebony",
+            "emo",
+            "female-ejaculation",
+            "fisting",
+            "footjob",
+            "gangbang",
+            "gay",
+            "girlfriend",
+            "group-sex",
+            "hairy",
+            "handjob",
+            "hardcore",
+            "hentai",
+            "indian",
+            "interracial",
+            "latina",
+            "lesbian",
+            "lingerie",
+            "masturbation",
+            "mature",
+            "milf",
+            "non-nude",
+            "panties",
+            "penis",
+            "pornstar",
+            "public-sex",
+            "pussy",
+            "redhead",
+            "selfshot",
+            "shemale",
+            "solo-male",
+            "teen",
+            "threesome",
+            "toys"
+        ]
+        self.key_words = []
+        self.sort = "latest"
+        self.pages = []
+        self.lib_dir = "sexcom_lib"
+        self.json_path = "gif_urls.json"
+        self.use_mysql = False
+        self.mysql_conf = {}
+        self.use_proxy = False
+        self.proxy = {}
 
+        self.phase = {
+            "get_urls": True,
+            "get_gifs": True
+        }
+        self.headers = {
+            "referer": "https://www.sex.com/",
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/105.0.0.0 Safari/537.36"
+        }
+        self.gif_xpath = "//div[@id=\"masonry_container\"]/div[@class=\"masonry_box small_pin_box\"]/a[@class=\"image_wrapper\"]/img/@data-src"
 
-def mkdir_lib(path: str) -> tuple[str, str]:
-    """
-    创建 lib 目录、关键词目录并返回 lib 路径与 json 路径
-    :param path: 工作路径
-    :return: lib_p：lib 路径, json_p: json 路径
-    """
-    # 创建 sexcom_lib 目录
-    lib_p = os.path.join(path, 'sexcom_lib')
-    if not os.path.exists(lib_p):
-        os.mkdir(lib_p)
-    json_p = os.path.join(lib_p, 'gif_urls.json')
-    return lib_p, json_p
+        if settings != '':
+            self._load_settings(settings)
 
+        self.img_urls = {}
+        self.pending_urls = []
 
-def get_gif_url(url: str, headers: dict, params: dict, keys: list[str], start: int, end: int) -> dict:
-    """
-    通过 requests 模块和 xpath 解析 gif 图片地址
-    :param url: 请求的 url
-    :param headers: 请求头
-    :param params: 传递关键词和排序方式
-    :param keys: 关键词
-    :param start: 起始页面
-    :param end: 结束页面
-    :return: 以关键词作为 key ， url 列表作为 value 的字典
-    """
-    if end < start:
-        start, end = end, start
-        print(f'警告：起始页码大于结束页码，已处理为 {start} - {end} 页')
-    urls_out = {}
-    for key in keys:
-        params['page'] = start
-        params['query'] = key
-        urls_out[key] = []
-        while params['page'] <= end:
-            res = etree.HTML(requests.get(url=url, headers=headers, params=params).text)
-            urls_out[key] = urls_out[key] + res.xpath(gif_xpath)
-            params['page'] += 1
-        urls_out[key] = list(map(lambda i: i.split('?')[0], urls_out[key]))
-        urls_out[key] = list(set(urls_out[key]))
-        pass
-    return urls_out
-
-
-def urls_to_json(path: str, data: dict):
-    """
-    将 urls 写入 json 文件
-    :param path: json 路径
-    :param data: 需要写入的 url 数据
-    :return: None
-    """
-    with open(path, 'w', encoding='UTF-8') as f:
-        json.dump(data, f, ensure_ascii=False, indent=4)
-
-
-def urls_to_mysql(data: dict, conf: dict):
-    """
-    将 url 列表写入数据库
-    :param data: 要写入的 url 字典
-    :param conf: 数据库配置字典
-    :return: None
-    """
-    # 创建数据库连接
-    coon = Connection(
-        host=conf['host'],
-        port=conf['port'],
-        user=conf['user'],
-        password=conf['password']
-    )
-    cursor = coon.cursor()
-    coon.select_db(conf['db'])
-
-    # 创建表
-    if conf['create_table'] is True:
-        cursor.execute(f"CREATE TABLE IF NOT EXISTS `{conf['table']}`( `name` varchar(50) NOT NULL DEFAULT '2001_01_01-10000000.gif' COMMENT '图片名', `url` varchar(100) NOT NULL DEFAULT 'https://' COMMENT '图片 url', `tag` varchar(100) NOT NULL DEFAULT 'unknown' COMMENT '图片标签', `finish` TINYINT(1) NOT NULL DEFAULT 0 COMMENT '是否已下载', PRIMARY KEY (`name`)) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_general_ci;")
-        coon.commit()
-
-    # 取得数据库中所有的文件名
-    cursor.execute(f"SELECT name FROM {conf['table']};")
-    all_names = []
-    for v in cursor.fetchall():
-        all_names.append(''.join(v))
-
-    # 往数据库写入数据
-    for tag in data:
-        for url in data[tag]:
-            gif_name_part = url.split('/')
-            gif_name = gif_name_part[-4] + '_' + gif_name_part[-3] + '_' + gif_name_part[-2] + '-' + gif_name_part[-1]
-            if gif_name in all_names:
-                # 如果数据库中已存在，则跳过
-                print(f'{gif_name} 在数据库中已存在')
-                continue
-            else:
-                sql = f"INSERT INTO {conf['table']} (name, url, tag, finish) VALUES ('{gif_name}', '{url}', '{tag}', 0);"
-                cursor.execute(sql)
-        coon.commit()
-        print(f"tag: {tag} 已写入数据库")
-    coon.close()
-
-
-def get_db_urls(conf: dict) -> list[str]:
-    """
-    获取数据库中未下载的的 gif 链接
-    :param conf: 数据库配置文件
-    :return: 未下载的 gif 链接列表
-    """
-    # 创建数据库连接
-    coon = Connection(
-        host=conf['host'],
-        port=conf['port'],
-        user=conf['user'],
-        password=conf['password']
-    )
-    cursor = coon.cursor()
-    coon.select_db(conf['db'])
-    # 取得数据库中未下载的 url
-    cursor.execute(f"SELECT url FROM {conf['table']} WHERE finish = 0;")
-    urls = []
-    for v in cursor.fetchall():
-        urls.append(''.join(v))
-    cursor.close()
-    return urls
-
-
-def get_json_url(path: str) -> list[str]:
-    """
-    获取在 json 文件中的 gif 图片链接
-    :param path: json 文件路径
-    :return: gif 链接列表
-    """
-    with open(path, 'r', encoding='UTF-8') as f:
-        data = json.load(f)
-    down_list = []
-    for key in data:
-        for url in data[key]:
-            down_list.append(url)
-    return down_list
-
-
-def get_gif(url: str, headers: dict, count: int, total: int, path: str):
-    """
-    下载图片
-    :param url: 图片url
-    :param headers: 请求头
-    :param count: 单前计数
-    :param total: 总计图片数
-    :param path: 保存文件夹
-    :return: None
-    """
-    name_list = url.split('/')
-    name = name_list[-4] + '_' + name_list[-3] + '_' + name_list[-2] + '-' + name_list[-1]
-    file_path = os.path.join(path, name)
-    if os.path.exists(file_path):
-        print(f'{name} 已存在，跳过...')
-        return
-    else:
-        try:
-            gif = requests.get(url, headers=headers).content
-        except Exception as e:
-            print(f'网络错误: {e}\n{name} 已跳过...')
-            return
+        if self.use_proxy:
+            self.proxies = {
+                "http": "socks5://" + self.proxy['host'] + ":" + str(self.proxy['port']),
+                "https": "socks5://" + self.proxy['host'] + ":" + str(self.proxy['port'])
+            }
         else:
-            with open(file_path, 'wb') as f:
-                f.write(gif)
-            print(f'{name} 下载完成:[{count}:{total}]')
+            self.proxies = None
 
+        if self.use_mysql:
+            self.mysql_coon = Connection(
+                host=self.mysql_conf['host'],
+                port=self.mysql_conf['port'],
+                user=self.mysql_conf['user'],
+                password=self.mysql_conf['password']
+            )
+            self.mysql_coon.select_db(self.mysql_conf['db'])
+            self.mysql_cursor = self.mysql_coon.cursor()
+            # cursor.close()
 
-def update_db(down_list: list[str], conf: dict):
-    """
-    更新数据库，将本次下载的链接标记为已下载
-    :param down_list: gif 链接列表
-    :param conf: 数据库配置文件
-    :return: None
-    """
-    # 创建数据库连接
-    coon = Connection(
-        host=conf['host'],
-        port=conf['port'],
-        user=conf['user'],
-        password=conf['password']
-    )
-    cursor = coon.cursor()
-    coon.select_db(conf['db'])
-    for url in down_list:
-        cursor.execute(f"UPDATE `{conf['table']}` SET `finish`=1 WHERE url = '{url}';")
-    coon.commit()
-    cursor.close()
-    print('已更新数据库')
+        if not os.path.exists(self.lib_dir):
+            os.mkdir(self.lib_dir)
 
+    def _load_settings(self, path: str):
+        with open(path, "r", encoding="utf-8") as fp:
+            raw_dict = json.load(fp)
+        for item in raw_dict:
+            if hasattr(self, item):
+                self.__setattr__(item, raw_dict[item])
+            else:
+                logger.warning(f"\"{item}\": 多余的选项存在于配置文件")
+        logger.info("配置文件读取完毕")
 
-def main():
-    # 取得配置
-    key_words, start_page, end_page, params_root, use_mysql, mysql_conf, phase_conf = get_settings(settings_path)
-    # 创建目录
-    lib_path, json_path = mkdir_lib(os.getcwd())
+    def _urls_to_json(self):
+        with open(os.path.join(self.lib_dir, self.json_path), 'w', encoding='UTF-8') as fp:
+            json.dump(self.img_urls, fp, ensure_ascii=False, indent=2)
 
-    # 获取 url 列表
-    gif_urls = []
-    if phase_conf['get_urls'] is True:
-        gif_urls = get_gif_url(root_url, headers_root, params_root, key_words, start_page, end_page)
-        # 将 url 列表写入 json 文件
-        urls_to_json(json_path, gif_urls)
-        # 写入列表到数据库
-        if use_mysql is True:
-            urls_to_mysql(gif_urls, mysql_conf)
+    def _get_urls_net(self):
+        if self.pages[0] > self.pages[1]:
+            logger.warning("\"pages\": 起始页大于终止页，已翻转")
+            self.pages[0], self.pages[1] = self.pages[1], self.pages[0]
+        for item in self.key_words:
+            self.img_urls[item] = []
+            params = {
+                "sort": self.sort,
+                "page": self.pages[0]
+            }
+            if item.lower() in self.catalogue_list:
+                url = self.catalogue_url + item + "/"
+            else:
+                url = self.query_url
+                params["query"] = item
 
-    # 转换下载列表
-    if use_mysql is True:
-        down_urls = get_db_urls(mysql_conf)
-    elif phase_conf['get_urls'] is True:
-        down_urls = []
-        for key in gif_urls:
-            for url in gif_urls[key]:
-                down_urls.append(url)
-    elif os.path.isfile(json_path):
-        down_urls = get_json_url(json_path)
-    else:
-        print('没有途径获取 url ，请检查配置文件。')
-        return 0
+            while params["page"] <= self.pages[1]:
+                logger.info(f'正在获取 {item} 第 {params["page"]} 页')
+                res = etree.HTML(requests.get(url=url, proxies=self.proxies, headers=self.headers, params=params).text)
+                for value in res.xpath(self.gif_xpath):
+                    value = value.split("?")[0]
+                    self.img_urls[item].append(value)
+                params["page"] += 1
+            self.img_urls[item] = list(set(self.img_urls[item]))
+        logger.info("图片地址解析完毕")
+        self._urls_to_json()
 
-    # 获取图片
-    if phase_conf['get_gifs'] is True:
-        total = len(down_urls)
-        count = 1
-        for url in down_urls:
-            get_gif(url, headers_gif, count, total, lib_path)
+    def _data_to_pending(self):
+        for key in self.img_urls:
+            for url in self.img_urls[key]:
+                name_part = url.split('/')
+                gif_name = '_'.join(name_part[-4:-1]) + '-' + name_part[-1]
+                self.pending_urls[gif_name] = url
+            logger.info(f'"{key}" 已添加至待处理列表，共 {len(self.img_urls[key])} 条')
+        logger.info(f"待处理列表整理完成，共 {len(self.pending_urls)} 条")
+
+    def _get_urls_disk(self):
+        with open(os.path.join(self.lib_dir, self.json_path), 'r', encoding='UTF-8') as fp:
+            data = json.load(fp)
+        self.img_urls = data
+        logger.info("图片地址解析完毕")
+
+    def _sync_mysql(self):
+        if self.mysql_conf['create_table']:
+            self.mysql_cursor.execute(
+                f"CREATE TABLE IF NOT EXISTS `{self.mysql_conf['table']}`( `name` varchar(50) NOT NULL DEFAULT '2001_01_01-10000000.gif' COMMENT '图片名', `url` varchar(100) NOT NULL DEFAULT 'https://' COMMENT '图片 url', `tag` varchar(100) NOT NULL DEFAULT 'unknown' COMMENT '图片标签', `finish` TINYINT(1) NOT NULL DEFAULT 0 COMMENT '是否已下载', PRIMARY KEY (`name`)) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_general_ci;")
+            self.mysql_coon.commit()
+
+        self.mysql_cursor.execute(f"SELECT `name` FROM {self.mysql_conf['table']};")
+        all_pic_name = []
+        for v in self.mysql_cursor.fetchall():
+            all_pic_name.append(v[0])
+
+        for key in self.img_urls:
+            count = 0
+            for url in self.img_urls[key]:
+                name_part = url.split('/')
+                gif_name = '_'.join(name_part[-4:-1]) + '-' + name_part[-1]
+                if gif_name in all_pic_name:
+                    continue
+                else:
+                    count += 1
+                    self.mysql_cursor.execute(
+                        f"INSERT IGNORE INTO {self.mysql_conf['table']} (`name`, `url`, `tag`, `finish`) VALUES ('{gif_name}', '{url}', '{key}', 0);")
+            self.mysql_coon.commit()
+            logger.info(f'"{key}" 已与数据库同步，新增 {count} 条数据')
+
+    def _mysql_to_pending(self):
+        self.mysql_cursor.execute(f"SELECT `name`,`url` FROM {self.mysql_conf['table']} WHERE `finish` = 0;")
+        for v in self.mysql_cursor.fetchall():
+            self.pending_urls[v[0]] = v[1]
+
+    def get_urls(self):
+        logger.info("正在获取图片地址...")
+        self.pending_urls = {}
+        if self.phase['get_urls']:
+            self._get_urls_net()
+        elif os.path.isfile(os.path.join(self.lib_dir, self.json_path)):
+            self._get_urls_disk()
+        else:
+            logger.error(f'"{self.json_path}" 文件未找到')
+
+        if self.use_mysql:
+            self._sync_mysql()
+            self._mysql_to_pending()
+        else:
+            self._data_to_pending()
+        logger.info(f"待下载图片共 {len(self.pending_urls)} 张")
+
+    def _download_gif(self, name: str, url: str) -> Exception or None:
+        if os.path.exists(os.path.join(self.lib_dir, name)):
+            return FileExistsError(name)
+        try:
+            gif_data = requests.get(url, proxies=self.proxies, headers=self.headers).content
+        except Exception as err:
+            return err
+        else:
+            with open(os.path.join(self.lib_dir, name), 'wb') as fp:
+                fp.write(gif_data)
+            if self.use_mysql:
+                self.mysql_cursor.execute(f"UPDATE {self.mysql_conf['table']} SET `finish`=1 WHERE url = '{url}';")
+                self.mysql_coon.commit()
+            return None
+
+    def download(self):
+        logger.info("正在下载图片...")
+        count = 0
+        total = len(self.pending_urls)
+        count_err = 0
+        for name in self.pending_urls:
             count += 1
-        if use_mysql is True:
-            update_db(down_urls, mysql_conf)
-
-
-if __name__ == '__main__':
-    main()
+            err = self._download_gif(name, self.pending_urls[name])
+            if err is not None:
+                count_err += 1
+                logger.warning(f'[{count}/{total}] {name} 下载失败：{err}')
+            logger.info(f'[{count}/{total}] 下载完成：{name}')
+        if self.use_mysql:
+            self.mysql_cursor.close()
+        logger.info("所有图片下载完成")

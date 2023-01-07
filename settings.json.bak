@@ -1,0 +1,27 @@
+{
+    "key_words": [
+        "teen",
+        "selfshot",
+        "Squirting",
+        "Orgasm",
+        "asian",
+        "female-ejaculation"
+    ],
+    "sort": "latest",
+    "start_page": 1,
+    "end_page": 3,
+    "use_mysql": true,
+    "mysql_conf": {
+        "host": "10.0.0.2",
+        "port": 3306,
+        "user": "spider",
+        "password": "123456",
+        "db":"spider_db",
+        "table": "sexcom",
+        "create_table": false
+    },
+    "phase": {
+        "get_urls": true,
+        "get_gifs": true
+    }
+}
